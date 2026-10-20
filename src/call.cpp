@@ -871,6 +871,10 @@ void DarlingServer::Call::SetDyldInfo::processCall() {
 	_sendReply(code);
 };
 
+void DarlingServer::Call::TaskSetSpecialPort::processCall() {
+	_sendReply(dtape_task_set_special_port(_body.which, _body.port));
+};
+
 void DarlingServer::Call::StopAfterExec::processCall() {
 	int code = 0;
 

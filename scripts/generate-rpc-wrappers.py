@@ -651,6 +651,12 @@ calls = [
 		('count', 'int32_t'),
 		('activity_id', 'uint64_t*', 'uint64_t'),
 	], [], XNU_TRAP_CALL | XNU_TRAP_NOPREFIX | XNU_TRAP_NOSUFFIX),
+	# Embedding launchers have no guest MIG library at process preparation time.
+	# Operate only on the caller task, with normal XNU right copying/validation.
+	('task_set_special_port', [
+		('which', 'int32_t'),
+		('port', 'uint32_t'),
+	], []),
 ]
 
 ALLOWED_PRIVATE_TYPES = [

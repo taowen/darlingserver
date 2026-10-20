@@ -22,6 +22,7 @@ void dtape_init_in_thread(void);
 void dtape_deinit(void);
 
 uint32_t dtape_task_self_trap(void);
+int dtape_task_set_special_port(int32_t which, uint32_t name);
 uint32_t dtape_host_self_trap(void);
 uint32_t dtape_thread_self_trap(void);
 uint32_t dtape_mach_reply_port(void);
