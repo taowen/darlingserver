@@ -5,6 +5,8 @@
 #include <kern/ipc_tt.h>
 #include <ipc/ipc_object.h>
 #include <ipc/ipc_port.h>
+#include <ipc/ipc_space.h>
+#include <mach/task_server.h>
 
 int dtape_task_set_special_port(int32_t which, uint32_t name) {
 	ipc_object_t object = IO_NULL;
