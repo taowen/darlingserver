@@ -73,13 +73,21 @@ int ftruncate(int fd, off_t length);
 
 void dtape_memory_init(void) {
 #if __aarch64__ || __arm64__
-	// On x86_64 PAGE_SHIFT is a 12 macro and the host page size is 4K, so the two
-	// agree by construction; deriving the ARM64 variable is what buys the same
-	// agreement on a 16K host. dtape_init() runs this before any PAGE_SIZE user.
-	PAGE_SHIFT_CONST = __builtin_ctzl(sysconf(_SC_PAGESIZE));
+	long host_page = sysconf(_SC_PAGESIZE);
+	if (host_page <= 0 || (host_page & (host_page - 1))) {
+		panic("Invalid host page geometry");
+	}
+	unsigned int guest_shift = DSERVER_GUEST_PAGE_SHIFT ? DSERVER_GUEST_PAGE_SHIFT : __builtin_ctzl(host_page);
+	if ((1UL << guest_shift) < (unsigned long)host_page) {
+		panic("Guest granule smaller than host page");
+	}
+	PAGE_SHIFT_CONST = guest_shift;
+#elif DSERVER_GUEST_PAGE_SHIFT && DSERVER_GUEST_PAGE_SHIFT != 12
+#error Fixed guest page override currently requires ARM64
 #endif
 };
 
+// Backend hooks deliberately count Linux host pages, not guest VM pages.
 static uint64_t dtape_byte_count_to_page_count_round_up(uint64_t byte_count) {
 	return (byte_count + (sysconf(_SC_PAGESIZE) - 1)) / sysconf(_SC_PAGESIZE);
 };
@@ -110,7 +118,7 @@ vm_map_t dtape_vm_map_create(struct dtape_task* task) {
 	os_ref_init(&map->map_refcnt, NULL);
 
 	map->max_offset = MACH_VM_MAX_ADDRESS;
-	map->dtape_page_shift = __builtin_ctzl(sysconf(_SC_PAGESIZE));
+	map->dtape_page_shift = PAGE_SHIFT;
 
 	map->dtape_task = task;
 

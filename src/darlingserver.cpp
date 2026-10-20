@@ -1068,6 +1068,26 @@ static void handle_sigusr1(int signum) {
 #endif
 
 int main(int argc, char** argv) {
+	// An embedding launcher may already own namespaces, userland and process
+	// lifetime. Keep only the real RPC/XNU service in this explicit mode.
+	if (argc == 3 && strcmp(argv[1], "--rpc-only") == 0) {
+		struct stat st;
+		if (stat(argv[2], &st) != 0 || !S_ISDIR(st.st_mode)
+			|| st.st_uid != getuid() || (st.st_mode & 077) != 0) {
+			fprintf(stderr, "RPC prefix must be a private directory owned by the caller\n");
+			return 1;
+		}
+		signal(SIGPIPE, SIG_IGN);
+		try {
+			auto server = new DarlingServer::Server(argv[2]);
+			fprintf(stderr, "DARLINGSERVER_RPC_ONLY prefix=%s host_page=%ld guest_shift=%d\n",
+				argv[2], sysconf(_SC_PAGESIZE), DSERVER_GUEST_PAGE_SHIFT);
+			server->start();
+		} catch (const std::exception& e) {
+			fprintf(stderr, "RPC server failed: %s\n", e.what());
+		}
+		return 1;
+	}
 	const char* prefix = NULL;
 	uid_t originalUID = -1;
 	gid_t originalGID = -1;

@@ -2,6 +2,14 @@ project(darlingserver)
 
 cmake_minimum_required(VERSION 3.13)
 
+# Zero retains the upstream host-page policy. Embedders may select a larger
+# guest granule; Linux hooks still exchange counts in host-page units.
+set(DSERVER_GUEST_PAGE_SHIFT 0 CACHE STRING "Guest VM page shift, or zero for host geometry")
+if (NOT DSERVER_GUEST_PAGE_SHIFT MATCHES "^(0|12|14|16)$")
+	message(FATAL_ERROR "Unsupported guest VM page shift")
+endif()
+add_compile_definitions(DSERVER_GUEST_PAGE_SHIFT=${DSERVER_GUEST_PAGE_SHIFT})
+
 option(DSERVER_TOOLS "Build darlingserver tools (for debugging)" OFF)
 option(DSERVER_ASAN "Build darlingserver with ASAN" OFF)
 option(DSERVER_UBSAN "Build darlingserver with UBSAN" OFF)
