@@ -312,6 +312,14 @@ void DarlingServer::Kqchan::MachPort::_processMessages() {
 };
 
 void DarlingServer::Kqchan::MachPort::_modify(uint64_t receiveBuffer, uint64_t receiveBufferSize, uint64_t savedFilterFlags, pid_t nstid) {
+	// Modification also acknowledges any notification already sent. The peer
+	// may drain those packets while waiting for this acknowledgement. Defer new
+	// notifications until after the reply, then recheck the real Mach queue.
+	{
+		std::unique_lock lock(_notificationMutex);
+		_canSendNotification = true;
+		_deferNotification = true;
+	}
 	kqchanMachPortLog.debug() << *this << ": Received modification request with {receiveBuffer=" << receiveBuffer << ",receiveBufferSize=" << receiveBufferSize << ",savedFilterFlags=" << savedFilterFlags << "}" << kqchanMachPortLog.endLog;
 
 	auto maybeThread = threadRegistry().lookupEntryByNSID(nstid);
@@ -340,6 +348,7 @@ void DarlingServer::Kqchan::MachPort::_modify(uint64_t receiveBuffer, uint64_t r
 		kqchanMachPortLog.debug() << *self << ": Sending modification reply/acknowledgement" << kqchanMachPortLog.endLog;
 
 		self->_outbox.push(std::move(msg));
+		self->_sendDeferredNotification();
 	});
 };
 
