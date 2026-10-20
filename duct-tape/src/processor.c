@@ -37,6 +37,9 @@ void dtape_processor_init(void) {
 	processor_avail_count = get_nprocs();
 	if (processor_avail_count > MAX_SCHED_CPUS)
 		processor_avail_count = MAX_SCHED_CPUS;
+#if DSERVER_SINGLE_CPU
+	processor_count = processor_avail_count = 1;
+#endif
 
 	processor_avail_count_user = processor_avail_count;
 	primary_processor_avail_count = processor_avail_count;
@@ -238,7 +241,7 @@ processor_set_info(
 
 		basic_info = (processor_set_basic_info_t) info;
 #ifdef __DARLING__
-		basic_info->processor_count = get_nprocs();
+		basic_info->processor_count = processor_avail_count;
 #else
 #if defined(__x86_64__)
 		basic_info->processor_count = processor_avail_count_user;

@@ -1078,6 +1078,15 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 		signal(SIGPIPE, SIG_IGN);
+#if DSERVER_SINGLE_CPU
+		cpu_set_t available, one;
+		if (sched_getaffinity(0, sizeof(available), &available) != 0) return 1;
+		CPU_ZERO(&one);
+		for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+			if (CPU_ISSET(cpu, &available)) { CPU_SET(cpu, &one); break; }
+		}
+		if (sched_setaffinity(0, sizeof(one), &one) != 0) return 1;
+#endif
 		try {
 			auto server = new DarlingServer::Server(argv[2]);
 			fprintf(stderr, "DARLINGSERVER_RPC_ONLY prefix=%s host_page=%ld guest_shift=%d\n",

@@ -73,6 +73,9 @@ kern_return_t host_info(host_t host, host_flavor_t flavor, host_info_t info, mac
 #endif
 			basic_info->max_cpus = sysconf(_SC_NPROCESSORS_CONF);
 			basic_info->avail_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+#if DSERVER_SINGLE_CPU
+			basic_info->max_cpus = basic_info->avail_cpus = 1;
+#endif
 
 			// if there's room for the modern structure, fill in some additional info
 			if (*count >= HOST_BASIC_INFO_COUNT) {
