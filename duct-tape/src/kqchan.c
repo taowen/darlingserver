@@ -32,6 +32,7 @@ dtape_kqchan_mach_port_t* dtape_kqchan_mach_port_create(dtape_task_t* owning_tas
 	task_reference(&kqchan->task->xnu_task);
 
 	os_ref_init(&kqchan->refcount, NULL);
+	dtape_mutex_init(&kqchan->processing_lock);
 
 	kqchan->knote.kn_id = port;
 	kqchan->knote.kn_ext[0] = receive_buffer;
@@ -63,11 +64,13 @@ void dtape_kqchan_mach_port_destroy(dtape_kqchan_mach_port_t* kqchan) {
 };
 
 void dtape_kqchan_mach_port_modify(dtape_kqchan_mach_port_t* kqchan, uint64_t receive_buffer, uint64_t receive_buffer_size, uint64_t saved_filter_flags) {
+	dtape_mutex_lock(&kqchan->processing_lock);
 	struct kevent_qos_s kev = {
 		.fflags = saved_filter_flags,
 		.ext = { receive_buffer, receive_buffer_size },
 	};
 	filt_machporttouch(&kqchan->knote, &kev);
+	dtape_mutex_unlock(&kqchan->processing_lock);
 };
 
 void dtape_kqchan_mach_port_disable_notifications(dtape_kqchan_mach_port_t* kqchan) {
@@ -76,6 +79,7 @@ void dtape_kqchan_mach_port_disable_notifications(dtape_kqchan_mach_port_t* kqch
 };
 
 bool dtape_kqchan_mach_port_fill(dtape_kqchan_mach_port_t* kqchan, dserver_kqchan_reply_mach_port_read_t* reply, uint64_t default_buffer, uint64_t default_buffer_size, uint32_t data_flags) {
+	dtape_mutex_lock(&kqchan->processing_lock);
 	struct kevent_qos_s kev;
 	bool maybe_used_default_buffer = false;
 	thread_t xthread = current_thread();
@@ -97,6 +101,7 @@ bool dtape_kqchan_mach_port_fill(dtape_kqchan_mach_port_t* kqchan, dserver_kqcha
 		reply->kev.flags = EV_DISPATCH2 | EV_ONESHOT | EV_VANISHED;
 		reply->kev.udata = kqchan->knote.kn_udata;
 
+		dtape_mutex_unlock(&kqchan->processing_lock);
 		return true;
 	}
 
@@ -104,7 +109,12 @@ bool dtape_kqchan_mach_port_fill(dtape_kqchan_mach_port_t* kqchan, dserver_kqcha
 
 	dtape_log_debug("has events before process? %s", has_events ? "yes" : "no");
 
+	// The ordinary kqueue scanner suppresses a locked knote while its filter
+	// runs. Here the processing mutex supplies real exclusive ownership; the
+	// socket protocol coalesces readiness until this read is acknowledged.
+	kqchan->knote.kn_status |= KN_LOCKED | KN_SUPPRESSED;
 	bool result = (filt_machportprocess(&kqchan->knote, (void*)&reply->kev) & FILTER_ACTIVE) ? true : false;
+	kqchan->knote.kn_status &= ~(KN_LOCKED | KN_SUPPRESSED);
 	reply->data_residual = thread->kevent_ctx.kec_data_resid;
 
 	dtape_log_debug("had events that were processed? %s", result ? "yes" : "no");
@@ -119,10 +129,12 @@ bool dtape_kqchan_mach_port_fill(dtape_kqchan_mach_port_t* kqchan, dserver_kqcha
 		dtape_semaphore_up(kqchan->waiter_read_semaphore);
 	}
 
+	dtape_mutex_unlock(&kqchan->processing_lock);
 	return result;
 };
 
 bool dtape_kqchan_mach_port_has_events(dtape_kqchan_mach_port_t* kqchan) {
+	if (kqchan->knote.kn_status & KN_VANISHED) return true;
 	if (imq_is_set(kqchan->knote.kn_mqueue)) {
 		return ipc_mqueue_set_peek(kqchan->knote.kn_mqueue);
 	} else {
