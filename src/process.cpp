@@ -28,6 +28,7 @@
 #include <regex>
 #include <sstream>
 #include <cerrno>
+#include <utility>
 
 #include <sys/mman.h>
 
@@ -126,9 +127,9 @@ DarlingServer::Process::Process(ID id, NSID nsid, Architecture architecture, int
 	}
 
 	// NOTE: see thread.cpp for why it's okay to use `this` here
-	_dtapeTask = dtape_task_create(parentProcess ? parentProcess->_dtapeTask : nullptr, _nspid, this, static_cast<dserver_rpc_architecture_t>(_architecture));
 	uint32_t audit[8] = {};
 	readProcessIdentity(_pid, _nspid, audit);
+	_dtapeTask = dtape_task_create(parentProcess ? parentProcess->_dtapeTask : nullptr, _nspid, this, static_cast<dserver_rpc_architecture_t>(_architecture));
 	dtape_task_init_identity(_dtapeTask, audit);
 	_dtapeForkWaitSemaphore = dtape_semaphore_create(_dtapeTask, 0);
 
