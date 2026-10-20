@@ -250,6 +250,12 @@ int proc_get_effective_task_policy(task_t task, int flavor) {
 	}
 };
 
+void dtape_task_init_identity(dtape_task_t* task, const uint32_t audit[8]) {
+	memcpy(task->xnu_task.audit_token.val, audit, sizeof(task->xnu_task.audit_token.val));
+	task->xnu_task.sec_token.val[0] = audit[1];
+	task->xnu_task.sec_token.val[1] = audit[2];
+}
+
 int task_pid(task_t task) {
 	return pid_from_task(task);
 };

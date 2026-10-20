@@ -26,10 +26,53 @@
 
 #include <fstream>
 #include <regex>
+#include <sstream>
+#include <cerrno>
 
 #include <sys/mman.h>
 
 static DarlingServer::Log processLog("process");
+
+static void readProcessIdentity(pid_t pid, uint32_t nsid, uint32_t audit[8]) {
+	const std::string base = "/proc/" + std::to_string(pid) + "/";
+	audit[0] = audit[6] = UINT32_MAX; // Linux's unassigned audit identity/session.
+	audit[5] = nsid;
+	bool uidFound = false, gidFound = false;
+	std::ifstream status(base + "status");
+	std::string line;
+	while (std::getline(status, line)) {
+		if (line.rfind("Uid:", 0) == 0) {
+			std::istringstream values(line.substr(4));
+			uidFound = bool(values >> audit[3] >> audit[1]);
+		} else if (line.rfind("Gid:", 0) == 0) {
+			std::istringstream values(line.substr(4));
+			gidFound = bool(values >> audit[4] >> audit[2]);
+		}
+	}
+	if (!uidFound || !gidFound) throw std::system_error(ESRCH, std::generic_category(), "Missing process credentials");
+	std::ifstream stat(base + "stat");
+	if (!std::getline(stat, line)) throw std::system_error(ESRCH, std::generic_category(), "Missing process incarnation");
+	auto end = line.rfind(')'); // comm may itself contain spaces and parentheses.
+	if (end == std::string::npos) throw std::system_error(EIO, std::generic_category(), "Invalid process stat");
+	std::istringstream fields(line.substr(end + 1));
+	std::string field;
+	for (unsigned int number = 3; number <= 22; ++number) {
+		if (!(fields >> field)) throw std::system_error(EIO, std::generic_category(), "Truncated process stat");
+	}
+	std::istringstream ticks(field);
+	uint64_t startTicks;
+	if (!(ticks >> startTicks)) throw std::system_error(EIO, std::generic_category(), "Invalid process start ticks");
+	audit[7] = static_cast<uint32_t>(startTicks);
+	for (auto item : {std::make_pair("loginuid", 0), std::make_pair("sessionid", 6)}) {
+		errno = 0;
+		std::ifstream value(base + item.first);
+		if (!value) {
+			if (errno == ENOENT) continue; // Kernel without the audit facility.
+			throw std::system_error(errno ? errno : EIO, std::generic_category(), "Cannot read process audit identity");
+		}
+		if (!(value >> audit[item.second])) throw std::system_error(EIO, std::generic_category(), "Invalid process audit identity");
+	}
+}
 
 DarlingServer::Process::Process(ID id, NSID nsid, Architecture architecture, int pipe):
 	_pid(id),
@@ -84,6 +127,9 @@ DarlingServer::Process::Process(ID id, NSID nsid, Architecture architecture, int
 
 	// NOTE: see thread.cpp for why it's okay to use `this` here
 	_dtapeTask = dtape_task_create(parentProcess ? parentProcess->_dtapeTask : nullptr, _nspid, this, static_cast<dserver_rpc_architecture_t>(_architecture));
+	uint32_t audit[8] = {};
+	readProcessIdentity(_pid, _nspid, audit);
+	dtape_task_init_identity(_dtapeTask, audit);
 	_dtapeForkWaitSemaphore = dtape_semaphore_create(_dtapeTask, 0);
 
 	processLog.info() << "New process created with ID " << _pid << " and NSID " << _nspid;
