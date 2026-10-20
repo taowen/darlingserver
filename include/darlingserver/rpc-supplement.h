@@ -102,6 +102,8 @@ typedef struct dserver_kqchan_call_mach_port_read {
 	dserver_kqchan_callhdr_t header;
 	uint64_t default_buffer;
 	uint64_t default_buffer_size;
+	/* Optional extension: older requests end before this field. */
+	uint32_t data_flags;
 } dserver_kqchan_call_mach_port_read_t;
 
 typedef struct dserver_kqchan_reply_mach_port_read {
@@ -117,6 +119,8 @@ typedef struct dserver_kqchan_reply_mach_port_read {
 		int64_t data;
 		uint64_t ext[4];
 	} kev;
+	/* Remaining bytes in the caller's kevent data area after actual copyout. */
+	uint64_t data_residual;
 } dserver_kqchan_reply_mach_port_read_t;
 
 typedef struct dserver_kqchan_call_proc_modify {

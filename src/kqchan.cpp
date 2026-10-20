@@ -295,13 +295,14 @@ void DarlingServer::Kqchan::MachPort::_processMessages() {
 			} break;
 
 			case dserver_kqchan_msgnum_mach_port_read: {
-				if (msg->data().size() < sizeof(dserver_kqchan_call_mach_port_read_t)) {
+				if (msg->data().size() < offsetof(dserver_kqchan_call_mach_port_read_t, data_flags)) {
 					throw std::invalid_argument("Message buffer was too small for dserver_kqchan_call_mach_port_read");
 				}
 
 				auto read = reinterpret_cast<dserver_kqchan_call_mach_port_read_t*>(callhdr);
 
-				_read(read->default_buffer, read->default_buffer_size, read->header.tid);
+				_read(read->default_buffer, read->default_buffer_size, read->header.tid,
+					msg->data().size() >= sizeof(*read) ? read->data_flags : 0);
 			} break;
 
 			default:
@@ -342,7 +343,7 @@ void DarlingServer::Kqchan::MachPort::_modify(uint64_t receiveBuffer, uint64_t r
 	});
 };
 
-void DarlingServer::Kqchan::MachPort::_read(uint64_t defaultBuffer, uint64_t defaultBufferSize, pid_t nstid) {
+void DarlingServer::Kqchan::MachPort::_read(uint64_t defaultBuffer, uint64_t defaultBufferSize, pid_t nstid, uint32_t dataFlags) {
 	kqchanMachPortLog.debug() << *this << ": received read request with {defaultBuffer=" << defaultBuffer << ",defaultBufferSize=" << defaultBufferSize << "}" << kqchanMachPortLog.endLog;
 
 	{
@@ -379,7 +380,7 @@ void DarlingServer::Kqchan::MachPort::_read(uint64_t defaultBuffer, uint64_t def
 	auto thread = *maybeThread;
 
 	auto self = shared_from_this();
-	Thread::kernelAsync([self, thread, defaultBuffer, defaultBufferSize]() {
+	Thread::kernelAsync([self, thread, defaultBuffer, defaultBufferSize, dataFlags]() {
 		Message msg(sizeof(dserver_kqchan_reply_mach_port_read_t), 0, self->_checkForEventsAsyncFactory());
 
 		kqchanMachPortLog.debug() << *self << ": handling read request in microthread" << kqchanMachPortLog.endLog;
@@ -390,7 +391,7 @@ void DarlingServer::Kqchan::MachPort::_read(uint64_t defaultBuffer, uint64_t def
 		reply->header.number = dserver_kqchan_msgnum_mach_port_read;
 
 		Thread::currentThread()->impersonate(thread);
-		if (!dtape_kqchan_mach_port_fill(self->_dtapeKqchan, reply, defaultBuffer, defaultBufferSize)) {
+		if (!dtape_kqchan_mach_port_fill(self->_dtapeKqchan, reply, defaultBuffer, defaultBufferSize, dataFlags)) {
 			kqchanMachPortLog.debug() << *self << ": no events to read" << kqchanMachPortLog.endLog;
 			reply->header.code = 0xdead;
 		}

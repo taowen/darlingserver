@@ -77,7 +77,7 @@ namespace DarlingServer {
 		dtape_kqchan_mach_port_t* _dtapeKqchan = nullptr;
 
 		void _modify(uint64_t receiveBuffer, uint64_t receiveBufferSize, uint64_t savedFilterFlags, pid_t nstid);
-		void _read(uint64_t defaultBuffer, uint64_t defaultBufferSize, pid_t nstid);
+		void _read(uint64_t defaultBuffer, uint64_t defaultBufferSize, pid_t nstid, uint32_t dataFlags);
 
 		void _notify();
 

@@ -75,7 +75,7 @@ void dtape_kqchan_mach_port_disable_notifications(dtape_kqchan_mach_port_t* kqch
 	kqchan->context = NULL;
 };
 
-bool dtape_kqchan_mach_port_fill(dtape_kqchan_mach_port_t* kqchan, dserver_kqchan_reply_mach_port_read_t* reply, uint64_t default_buffer, uint64_t default_buffer_size) {
+bool dtape_kqchan_mach_port_fill(dtape_kqchan_mach_port_t* kqchan, dserver_kqchan_reply_mach_port_read_t* reply, uint64_t default_buffer, uint64_t default_buffer_size, uint32_t data_flags) {
 	struct kevent_qos_s kev;
 	bool maybe_used_default_buffer = false;
 	thread_t xthread = current_thread();
@@ -83,7 +83,8 @@ bool dtape_kqchan_mach_port_fill(dtape_kqchan_mach_port_t* kqchan, dserver_kqcha
 
 	thread->kevent_ctx.kec_data_out = thread->kevent_ctx.kec_data_avail = default_buffer;
 	thread->kevent_ctx.kec_data_size = thread->kevent_ctx.kec_data_resid = default_buffer_size;
-	thread->kevent_ctx.kec_process_flags = 0;
+	thread->kevent_ctx.kec_process_flags = data_flags & KEVENT_FLAG_STACK_DATA;
+	reply->data_residual = default_buffer_size;
 
 	dtape_log_debug("trying to fill kevent for kqchan %p with mqueue %p", kqchan, kqchan->knote.kn_mqueue);
 
@@ -104,6 +105,7 @@ bool dtape_kqchan_mach_port_fill(dtape_kqchan_mach_port_t* kqchan, dserver_kqcha
 	dtape_log_debug("has events before process? %s", has_events ? "yes" : "no");
 
 	bool result = (filt_machportprocess(&kqchan->knote, (void*)&reply->kev) & FILTER_ACTIVE) ? true : false;
+	reply->data_residual = thread->kevent_ctx.kec_data_resid;
 
 	dtape_log_debug("had events that were processed? %s", result ? "yes" : "no");
 
